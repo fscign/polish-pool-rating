@@ -1,0 +1,34 @@
+name: Daily data collection (Poland)
+on:
+  schedule:
+    - cron: '17 2 * * *'   # every day 02:17 UTC, before the German (02:47) and Latvian (03:23) updates
+  workflow_dispatch:       # "Run workflow" button for a manual run
+permissions:
+  contents: write
+concurrency:
+  group: repo-writes
+  cancel-in-progress: false
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      CS_COUNTRY: Poland
+      CS_FILE: data/cuescore_raw.json.gz
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install requests beautifulsoup4 lxml
+      - run: python3 -I collect_cuescore.py
+      - run: python3 -I collect_team.py
+      - name: Save new results
+        run: |
+          cat update_log.txt >> "$GITHUB_STEP_SUMMARY" || true
+          git config user.name "rating-bot"
+          git config user.email "rating-bot@users.noreply.github.com"
+          git add data
+          git commit -m "Daily collection $(date +%Y-%m-%d)" || echo "No changes"
+          for i in 1 2 3; do git pull --rebase && git push && exit 0; sleep 10; done
+          exit 1
