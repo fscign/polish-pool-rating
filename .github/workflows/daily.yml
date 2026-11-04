@@ -1,8 +1,6 @@
 name: Daily data collection (Poland)
 on:
-  schedule:
-    - cron: '17 2 * * *'   # every day 02:17 UTC, before the German (02:47) and Latvian (03:23) updates
-  workflow_dispatch:       # "Run workflow" button for a manual run
+  workflow_dispatch:       # manual only: Actions > "Daily data collection (Poland)" > Run workflow
 permissions:
   contents: write
 concurrency:
