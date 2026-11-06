@@ -1,4 +1,4 @@
-# Polish Pool Rating (data collection)
+# Polish Pool Rating (data collection: Poland and Czech Republic)
 
 Non-commercial, for the pool community. This repository collects Polish pool results every day, so no results are
 missed while the Polish rating is being built. The rating and the website come later, built the same way as the
@@ -9,7 +9,10 @@ Latvian and German ones.
   Multiball, straight pool, bank pool, one pocket, 7-ball), every match with a result. Everything is stored; a later build
   decides what counts. First collection 3 Nov 2026: 10,677 tournaments, 517,318 matches, 11,482 players.
 - `collect_team.py` -> `data/team_raw.json`: single games inside CueScore team events (league match days).
-- Daily runs re-read tournaments of the last 90 days and add new ones (about 1-3 minutes).
+- Czech Republic (added 6 Nov 2026), same scripts with CS_COUNTRY="Czech Republic": `data/cuescore_cze_raw.json.gz` and
+  `data/team_cze_raw.json`.
+- The German rating (fscign/german-pool-rating) copies these files every day and counts the matches of German players.
+- Runs every day at 00:23 UTC (since 6 Nov 2026); re-reads tournaments of the last 90 days and adds new ones.
 
 ## Setup
 1. Create a new repository (for example `polish-pool-rating`) and upload all files.

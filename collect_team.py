@@ -32,7 +32,7 @@ def get(url):
             if i == 3: raise
             time.sleep(3 * (i + 1))
 
-FILE = 'data/team_raw.json'
+FILE = os.environ.get('CS_TEAM_FILE', 'data/team_raw.json')   # Czech collection: CS_TEAM_FILE=data/team_cze_raw.json
 T = json.load(open(FILE, encoding='utf-8')) if os.path.exists(FILE) else \
     {'tournaments': [], 'matches': [], 'players': {}, 'rosters': {}, 'done': []}
 done = set(T['done'])

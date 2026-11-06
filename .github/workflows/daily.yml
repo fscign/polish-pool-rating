@@ -1,6 +1,8 @@
-name: Daily data collection (Poland)
+name: Data collection (Poland and Czech Republic)
 on:
-  workflow_dispatch:       # manual only: Actions > "Daily data collection (Poland)" > Run workflow
+  schedule:
+    - cron: '23 0 * * *'   # every day 00:23 UTC, before the German rating update (02:47 UTC) copies these files
+  workflow_dispatch:       # "Run workflow" button for manual runs
 permissions:
   contents: write
 concurrency:
@@ -9,19 +11,31 @@ concurrency:
 jobs:
   collect:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
-    env:
-      CS_COUNTRY: Poland
-      CS_FILE: data/cuescore_raw.json.gz
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - run: pip install requests beautifulsoup4 lxml
-      - run: python3 -I collect_cuescore.py
-      - run: python3 -I collect_team.py
+      - name: Poland - tournaments
+        continue-on-error: true
+        env: {CS_COUNTRY: Poland, CS_FILE: data/cuescore_raw.json.gz}
+        run: python3 -I collect_cuescore.py
+      - name: Poland - team events
+        continue-on-error: true
+        env: {CS_COUNTRY: Poland, CS_TEAM_FILE: data/team_raw.json}
+        run: python3 -I collect_team.py
+      - name: Czech Republic - tournaments (added 6 Nov 2026; the first run reads everything since 2016)
+        continue-on-error: true
+        env: {CS_COUNTRY: Czech Republic, CS_FILE: data/cuescore_cze_raw.json.gz}
+        run: python3 -I collect_cuescore.py
+      - name: Czech Republic - team events
+        continue-on-error: true
+        env: {CS_COUNTRY: Czech Republic, CS_TEAM_FILE: data/team_cze_raw.json}
+        run: python3 -I collect_team.py
       - name: Save new results
+        if: always()
         run: |
           cat update_log.txt >> "$GITHUB_STEP_SUMMARY" || true
           git config user.name "rating-bot"
