@@ -34,6 +34,9 @@ jobs:
         continue-on-error: true
         env: {CS_COUNTRY: Czech Republic, CS_TEAM_FILE: data/team_cze_raw.json}
         run: python3 -I collect_team.py
+      - name: Tournament Service - every country (added 7 Nov 2026; POL TOUR, Best of the East, EEBC)
+        continue-on-error: true
+        run: python3 -I collect_ts.py
       - name: Save new results
         if: always()
         run: |

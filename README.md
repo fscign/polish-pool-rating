@@ -11,6 +11,10 @@ Latvian and German ones.
 - `collect_team.py` -> `data/team_raw.json`: single games inside CueScore team events (league match days).
 - Czech Republic (added 6 Nov 2026), same scripts with CS_COUNTRY="Czech Republic": `data/cuescore_cze_raw.json.gz` and
   `data/team_cze_raw.json`.
+- `collect_ts.py` -> `data/ts_raw.json.gz` (added 7 Nov 2026): every pool event on Tournament Service (tournamentservice.net,
+  also shown on ebc-billiard.com), all countries since 2011. Poland's Grand Prix Polski POL TOUR, Dynamic Billard Best of the
+  East and EEBC events are only here, not on CueScore. Folders keep the list of their parts. First collection 7 Nov 2026:
+  2,871 events, 146,642 matches (142,977 played), 10,405 players; 16,658 played matches with a Polish player.
 - The German rating (fscign/german-pool-rating) copies these files every day and counts the matches of German players.
 - Runs every day at 00:23 UTC (since 6 Nov 2026); re-reads tournaments of the last 90 days and adds new ones.
 
