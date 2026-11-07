@@ -15,6 +15,10 @@ Latvian and German ones.
   also shown on ebc-billiard.com), all countries since 2011. Poland's Grand Prix Polski POL TOUR, Dynamic Billard Best of the
   East and EEBC events are only here, not on CueScore. Folders keep the list of their parts. First collection 7 Nov 2026:
   2,871 events, 146,642 matches (142,977 played), 10,405 players; 16,658 played matches with a Polish player.
+- `collect_pzbil.py` -> `data/pzbil_raw.json.gz` (added 7 Nov 2026): the Polish federation's site pzbil.pl. Tournaments
+  (about 860 since 2008: Polish Championships, Junior Tour, youth and school championships, Women's Polish Cup ...) with
+  every bracket match, player ids and full names; the Polish team league since 2025 (every singles and doubles game) and
+  the league archive 2011-2024 (archiwum.pzbil.pl). Only reachable from GitHub.
 - The German rating (fscign/german-pool-rating) copies these files every day and counts the matches of German players.
 - Runs every day at 00:23 UTC (since 6 Nov 2026); re-reads tournaments of the last 90 days and adds new ones.
 
