@@ -119,7 +119,7 @@ def fetch_event(tid):
                          m.get('roundName') or '', 0, x['disc'], '0', ''])
     v = (j.get('venues') or [{}])[0] or {}
     trow = [tid, j['name'], (j.get('starttime') or '')[:10], j.get('discipline'), j.get('defaultRaceTo'), 0, 0, j.get('type'),
-            v.get('placename') or '', (j.get('owner') or {}).get('name', ''), nm, len(rows), 'germany', v.get('name') or '', 'team']
+            v.get('placename') or '', (j.get('owner') or {}).get('name', ''), nm, len(rows), COUNTRY.lower(), v.get('name') or '', 'team']
     return trow, rows, players, unmatched, doubles
 
 def team_events(a, b):

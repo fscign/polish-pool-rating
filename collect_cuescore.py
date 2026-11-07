@@ -56,7 +56,7 @@ def handicap(j):
 def fetch(tid):
     """Tournament row:
     [id, name, start date, discipline, default race, default best-of-sets, handicap 1/0, type, city, owner, matches listed,
-     matches stored, 'germany', venue/club, status, stop date]
+     matches stored, country (lower case), venue/club, status, stop date]
     Match row: [tournament id, match id, player A, player B, score A, score B, race, date, round, penalty, game, best-of-sets, match status]"""
     j = get(f'{API}/tournament/?id={tid}').json()
     ms, nm = [], 0
