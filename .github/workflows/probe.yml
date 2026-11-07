@@ -1,0 +1,24 @@
+# Temporary test (7 Nov 2026): can GitHub reach pzbil.pl? Saves sample pages as a run artifact. Delete after use.
+name: pzbil.pl reachability test
+on: workflow_dispatch
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          mkdir p; cd p; i=0
+          for u in \
+            "https://pzbil.pl/tournament/index" "https://pzbil.pl/tournament/index?page=2" "https://pzbil.pl/tournament/index?page=43" \
+            "https://pzbil.pl/tournament/view?id=56" "https://pzbil.pl/tournament/view?id=1081" "https://pzbil.pl/tournament/players?id=1081" \
+            "https://pzbil.pl/tournament/final-places?id=1081" "https://pzbil.pl/tournament/view?id=1083" \
+            "https://pzbil.pl/liga/1-liga-bilardowa/info/matches/?season_id=6&group=1" "https://pzbil.pl/liga/1-liga-bilardowa/info/games/?match_id=1927&archive=0" \
+            "https://pzbil.pl/liga/1-liga-bilardowa/info/" "https://pzbil.pl/liga/2-liga-bilardowa/info/" "https://pzbil.pl/liga/3-liga-bilardowa/info/" \
+            "https://pzbil.pl/liga/bilardowa-ekstraklasa/info/archive?season_id=3" "https://pzbil.pl/liga/1-liga-bilardowa/info/archive?season_id=2" \
+            "https://pzbil.pl/page/polska-liga-bilardowa-archiwum/" "https://archiwum.pzbil.pl/liga/2024/terminarz_1liga.php" \
+            "https://archiwum.pzbil.pl/liga/2024/wyniki_liga_ind.php?kolejka=1&mecz=1" "https://archiwum.pzbil.pl/liga/2024/zespoly_2liga.php" \
+            "https://archiwum.pzbil.pl/liga/2016/terminarz_1liga.php" "https://pzbil.pl/zawodnicy/167/monika-zabek/" "https://pzbil.pl/historia" \
+            "http://www.bilard-sport.pl/poltour_2014/wyniki_online.php?turniej_id=370&grupa=0"; do
+            i=$((i+1)); code=$(curl -s -L -m 60 -A "Mozilla/5.0 (pool rating collector, non-commercial)" -o "p$i.html" -w '%{http_code}' "$u"); echo "$i $code $(wc -c < p$i.html) $u" | tee -a index.txt
+          done
+      - uses: actions/upload-artifact@v4
+        with: {name: pages, path: p}
