@@ -20,7 +20,7 @@ Output data/pzbil_raw.json.gz:
       a missing player is ''. Scores are strings as shown.
   players: {id: [first name, surname, club]}
 Each run reads new tournaments, tournaments of the last DAYS days or not finished, the current league seasons, and the
-archive only once (flag archive_done). Usage: python3 -I collect_pzbil.py [--days 60] [--all]
+archive once (flag archive_done = 3), then only retries archive pages that failed. Usage: python3 -I collect_pzbil.py [--days 60] [--all]
 """
 import json, re, sys, os, gzip, time, datetime, html as H
 import requests
@@ -34,6 +34,7 @@ ALL = '--all' in sys.argv
 TODAY = datetime.date.today()
 CUTOFF = (TODAY - datetime.timedelta(days=DAYS)).isoformat()
 PAUSE = 0.4
+RETRY_CAP = 150   # failed archive match pages retried per run (they take turns, oldest failures first)
 S = requests.Session(); S.headers.update({'User-Agent': 'Mozilla/5.0 (pool rating collector, non-commercial)', 'Accept-Language': 'pl,en;q=0.8'})
 LOG = []
 def say(*a):
@@ -212,20 +213,31 @@ def pl_date(s, year):
     return ''
 
 def archive():
-    if D.get('archive_done') == 2 and not ALL: return       # 2 = read with per-year page memory (fix 7 Nov)
-    idx = get_or_empty(f'{BASE}/page/polska-liga-bilardowa-archiwum/')
-    if not idx: return
-    starts = sorted(set(re.findall(r'https://archiwum\.pzbil\.pl/liga/(\d{4})/([a-z_0-9]+\.php(?:\?[^"\']*)?)', idx)))
+    """League archive 2011-2024. A full pass reads every schedule page (stored team matches are skipped) and records the
+    pages that answered with an error in D['archive_failed'] (schedule pages: [year, page]) and D['archive_failed_games']
+    ([year, link, date]). After a full pass (archive_done = 3) each run only retries those failed pages: pzbil.pl's
+    archive often answers 500, and a page that works later fills the gap (e.g. I liga 2023-2024)."""
+    full = ALL or D.get('archive_done') != 3
+    if full:
+        idx = get_or_empty(f'{BASE}/page/polska-liga-bilardowa-archiwum/')
+        if not idx: return
+        starts = [[int(y), p] for y, p in sorted(set(re.findall(r'https://archiwum\.pzbil\.pl/liga/(\d{4})/([a-z_0-9]+\.php(?:\?[^"\']*)?)', idx)))]
+        retry_games = []
+    else:
+        starts = D.get('archive_failed', [])
+        retry_games = D.get('archive_failed_games', [])
+        if not starts and not retry_games: return
+    failed_pages, failed_games = [], []
     n_m = 0; seen_pages = set(); seen_games = set()
+    games = [(y, l, d) for y, l, d in retry_games]
     for year, start in starts:
-        year = int(year)
         queue = [start]; dates = {}
         while queue:
             page = H.unescape(queue.pop(0))
             if (year, page) in seen_pages: continue          # page names repeat every year: remember them per year
             seen_pages.add((year, page))
             try: h = get(f'{ARCH}/liga/{year}/{page}')
-            except Exception as e: say('  failed', year, page, repr(e)[:100]); continue
+            except Exception as e: say('  failed', year, page, repr(e)[:100]); failed_pages.append([year, page]); continue
             # remember the date of each round on this schedule page: header "1 kolejka - 14 lutego" before the links
             cur = ''
             for tok in re.finditer(r'(\d+)(?:&nbsp;|\s)+kolejka(?:&nbsp;|\s|-)+(?:&nbsp;)?([^<]*)|href="(wyniki_[a-z0-9_]*ind[a-z0-9_]*\.php\?[^"]+)"', h):
@@ -233,18 +245,23 @@ def archive():
                 else: dates.setdefault(H.unescape(tok.group(3)), cur)
             for link in re.findall(r'href="((?:terminarz|zespoly|baraze|tabela_grupy|grupa)[a-z0-9_]*\.php(?:\?[^"]*)?)"', h):
                 if (year, H.unescape(link)) not in seen_pages: queue.append(link)
-        for link, date in dates.items():
-            key = (year, link)
-            if key in seen_games: continue
-            seen_games.add(key)
-            q = dict(re.findall(r'(\w+)=([^&]+)', link))
-            tid = f"A{year}:{link.split('.php')[0]}:{':'.join(f'{k}{v}' for k, v in q.items())}"
-            if tid in TOUR and not ALL: continue
-            if len(seen_games) % 200 == 0: save()
-            try: n_m += archive_match(f'{ARCH}/liga/{year}/{link}', tid, date, year)
-            except Exception as e: say('  failed', year, link, repr(e)[:100])
-    D['archive_done'] = 2
-    say(f'pzbil.pl league archive: {len(seen_games)} team matches, {n_m} games stored')
+        games += [(year, l, d) for l, d in dates.items()]
+    tries = 0
+    for year, link, date in games:
+        if (year, link) in seen_games: continue
+        if not full and tries >= RETRY_CAP: failed_games.append([year, link, date]); continue   # rest waits for the next run
+        tries += 1
+        seen_games.add((year, link))
+        q = dict(re.findall(r'(\w+)=([^&]+)', link))
+        tid = f"A{year}:{link.split('.php')[0]}:{':'.join(f'{k}{v}' for k, v in q.items())}"
+        if tid in TOUR and not ALL: continue
+        if len(seen_games) % 200 == 0: save()
+        try: n_m += archive_match(f'{ARCH}/liga/{year}/{link}', tid, date, year)
+        except Exception as e: say('  failed', year, link, repr(e)[:100]); failed_games.append([year, link, date])
+    D['archive_failed'] = failed_pages; D['archive_failed_games'] = failed_games
+    if full: D['archive_done'] = 3
+    say(f'pzbil.pl league archive ({"full pass" if full else "retry of failed pages"}): {n_m} games stored, '
+        f'still failing {len(failed_pages)} schedule pages and {len(failed_games)} match pages')
 
 def archive_match(url, tid, date, year):
     s = soup(get(url)); P = {}; ms = []
