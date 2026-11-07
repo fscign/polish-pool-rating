@@ -246,10 +246,10 @@ def archive():
             for link in re.findall(r'href="((?:terminarz|zespoly|baraze|tabela_grupy|grupa)[a-z0-9_]*\.php(?:\?[^"]*)?)"', h):
                 if (year, H.unescape(link)) not in seen_pages: queue.append(link)
         games += [(year, l, d) for l, d in dates.items()]
-    tries = 0
+    tries = 0; waiting = []
     for year, link, date in games:
         if (year, link) in seen_games: continue
-        if not full and tries >= RETRY_CAP: failed_games.append([year, link, date]); continue   # rest waits for the next run
+        if not full and tries >= RETRY_CAP: waiting.append([year, link, date]); continue   # rest waits for the next run
         tries += 1
         seen_games.add((year, link))
         q = dict(re.findall(r'(\w+)=([^&]+)', link))
@@ -258,7 +258,7 @@ def archive():
         if len(seen_games) % 200 == 0: save()
         try: n_m += archive_match(f'{ARCH}/liga/{year}/{link}', tid, date, year)
         except Exception as e: say('  failed', year, link, repr(e)[:100]); failed_games.append([year, link, date])
-    D['archive_failed'] = failed_pages; D['archive_failed_games'] = failed_games
+    D['archive_failed'] = failed_pages; D['archive_failed_games'] = waiting + failed_games   # untried first next time
     if full: D['archive_done'] = 3
     say(f'pzbil.pl league archive ({"full pass" if full else "retry of failed pages"}): {n_m} games stored, '
         f'still failing {len(failed_pages)} schedule pages and {len(failed_games)} match pages')
