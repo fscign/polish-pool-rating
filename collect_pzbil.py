@@ -132,7 +132,7 @@ def fetch_tournament(t):
             if not side[0][0] and not side[1][0]: continue
             # round: nearest heading or lettered section above (kept as found; brackets have no match numbers)
             ms.append([tid, n, side[0][0], side[1][0], side[0][1], side[1][1], game_of(t['name'] + ' ' + (txt(sub) if sub else '')), '', t['d1'], 'W1' if side[0][2] else 'W2' if side[1][2] else ''])
-        if not ms and len(DEBUG) < 5: DEBUG.append((tid, str(s)))
+        if not ms and len(DEBUG) < 5 and s.select_one('main table, main iframe'): DEBUG.append((tid, str(s)))
     row = [tid, t['name'], t['d1'], t['d2'], 'tournament', game_of(t['name']), t['status'], f"{BASE}/tournament/view?id={t['id']}", {}]
     return row, ms, P
 
@@ -212,7 +212,7 @@ def pl_date(s, year):
     return ''
 
 def archive():
-    if D.get('archive_done') and not ALL: return
+    if D.get('archive_done') == 2 and not ALL: return       # 2 = read with per-year page memory (fix 7 Nov)
     idx = get_or_empty(f'{BASE}/page/polska-liga-bilardowa-archiwum/')
     if not idx: return
     starts = sorted(set(re.findall(r'https://archiwum\.pzbil\.pl/liga/(\d{4})/([a-z_0-9]+\.php(?:\?[^"\']*)?)', idx)))
@@ -222,8 +222,8 @@ def archive():
         queue = [start]; dates = {}
         while queue:
             page = H.unescape(queue.pop(0))
-            if page in seen_pages: continue
-            seen_pages.add((page)); seen_pages.add(page)
+            if (year, page) in seen_pages: continue          # page names repeat every year: remember them per year
+            seen_pages.add((year, page))
             try: h = get(f'{ARCH}/liga/{year}/{page}')
             except Exception as e: say('  failed', year, page, repr(e)[:100]); continue
             # remember the date of each round on this schedule page: header "1 kolejka - 14 lutego" before the links
@@ -232,7 +232,7 @@ def archive():
                 if tok.group(1): cur = pl_date(H.unescape(tok.group(2) or ''), year)
                 else: dates.setdefault(H.unescape(tok.group(3)), cur)
             for link in re.findall(r'href="((?:terminarz|zespoly|baraze|tabela_grupy|grupa)[a-z0-9_]*\.php(?:\?[^"]*)?)"', h):
-                if H.unescape(link) not in seen_pages: queue.append(link)
+                if (year, H.unescape(link)) not in seen_pages: queue.append(link)
         for link, date in dates.items():
             key = (year, link)
             if key in seen_games: continue
@@ -243,7 +243,7 @@ def archive():
             if len(seen_games) % 200 == 0: save()
             try: n_m += archive_match(f'{ARCH}/liga/{year}/{link}', tid, date, year)
             except Exception as e: say('  failed', year, link, repr(e)[:100])
-    D['archive_done'] = True
+    D['archive_done'] = 2
     say(f'pzbil.pl league archive: {len(seen_games)} team matches, {n_m} games stored')
 
 def archive_match(url, tid, date, year):
