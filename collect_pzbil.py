@@ -54,6 +54,11 @@ def get(url):
             if i == 3: raise
             time.sleep(5 * (i + 1))
 
+def get_or_empty(url):
+    """pzbil.pl sometimes answers 500 for single pages: skip them (they are tried again next run)."""
+    try: return get(url)
+    except Exception as e: say('  skipped', url, repr(e)[:80]); return ''
+
 def soup(h): return BeautifulSoup(h, 'lxml')
 def txt(x): return re.sub(r'\s+', ' ', H.unescape(x.get_text(' ') if hasattr(x, 'get_text') else str(x))).replace('\xa0', ' ').strip()
 def pid(a):
@@ -105,7 +110,7 @@ def tournament_list():
 def fetch_tournament(t):
     tid = f"T{t['id']}"; P = {}
     # start list: full names and clubs
-    for tr in soup(get(f"{BASE}/tournament/players?id={t['id']}")).select('tr[data-key]'):
+    for tr in soup(get_or_empty(f"{BASE}/tournament/players?id={t['id']}")).select('tr[data-key]'):
         a = tr.find('a', href=re.compile('/zawodnicy/'))
         if not a: continue
         c = tr.find('a', href=re.compile('/kluby/'))
@@ -150,15 +155,15 @@ def league_new():
     n_m = 0
     for slug in SLUGS:
         seasons = set()
-        info = get(f'{BASE}/liga/{slug}/info/')
+        info = get_or_empty(f'{BASE}/liga/{slug}/info/')
         seasons |= {(int(x), 0) for x in re.findall(r'season_id=(\d+)', info)}
         for sid in range(1, 21):          # past seasons are only reachable by number
-            h = get(f'{BASE}/liga/{slug}/info/archive?season_id={sid}')
+            h = get_or_empty(f'{BASE}/liga/{slug}/info/archive?season_id={sid}')
             if f'season_id={sid}' in h and re.search(rf'/liga/{slug}/info/(matches|final-games)', h): seasons.add((sid, 1))
         for sid, arch in sorted(seasons):
             title = ''
             for g in range(1, 16):
-                h = get(f'{BASE}/liga/{slug}/info/matches/?season_id={sid}&group={g}&archive={arch}')
+                h = get_or_empty(f'{BASE}/liga/{slug}/info/matches/?season_id={sid}&group={g}&archive={arch}')
                 s = soup(h)
                 title = title or txt(s.select_one('h4') or '')
                 found = 0
@@ -178,7 +183,7 @@ def league_new():
                         n_m += res
                 if not found: break
             # final stages (play-off)
-            h = get(f'{BASE}/liga/{slug}/info/archive?season_id={sid}') if arch else info
+            h = get_or_empty(f'{BASE}/liga/{slug}/info/archive?season_id={sid}') if arch else info
             for mid in sorted(set(re.findall(r'final-games/\?match_id=(\d+)', h)), key=int):
                 tid = f'LF{slug[:2]}{sid}-{mid}'
                 if tid in TOUR and not ALL: continue
@@ -202,7 +207,8 @@ def pl_date(s, year):
 
 def archive():
     if D.get('archive_done') and not ALL: return
-    idx = get(f'{BASE}/page/polska-liga-bilardowa-archiwum/')
+    idx = get_or_empty(f'{BASE}/page/polska-liga-bilardowa-archiwum/')
+    if not idx: return
     starts = sorted(set(re.findall(r'https://archiwum\.pzbil\.pl/liga/(\d{4})/([a-z_0-9]+\.php(?:\?[^"\']*)?)', idx)))
     n_m = 0; seen_pages = set(); seen_games = set()
     for year, start in starts:
@@ -266,17 +272,24 @@ def main():
         store(row, ms, P)
         if old: n_upd += 1
         else: n_new += 1
+        if (n_new + n_upd) % 100 == 0: save()       # a long first run keeps what it has read
     say(f'pzbil.pl tournaments: {n_new} new, {n_upd} re-read')
-    league_new()
-    archive()
-    D['tournaments'] = sorted(TOUR.values(), key=lambda t: (t[2] or '', t[0]))
-    D['collected'] = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-    os.makedirs(os.path.dirname(FILE) or '.', exist_ok=True)
-    with gzip.open(FILE, 'wt', encoding='utf-8') as f: json.dump(D, f, ensure_ascii=False, separators=(',', ':'))
+    save()
+    for part in (league_new, archive):
+        try: part()
+        except Exception as e: say(f'  {part.__name__} stopped:', repr(e)[:150])
+        save()
     kinds = {}
     for t in D['tournaments']: kinds[t[4]] = kinds.get(t[4], 0) + 1
     say(f'pzbil.pl stored: {kinds}, {len(D["matches"])} matches, {len(D["players"])} players')
     with open('update_log.txt', 'a', encoding='utf-8') as f: f.write('\n'.join(LOG) + '\n')
+
+def save():
+    D['tournaments'] = sorted(TOUR.values(), key=lambda t: (t[2] or '', t[0]))
+    D['collected'] = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    os.makedirs(os.path.dirname(FILE) or '.', exist_ok=True)
+    with gzip.open(FILE + '.tmp', 'wt', encoding='utf-8') as f: json.dump(D, f, ensure_ascii=False, separators=(',', ':'))
+    os.replace(FILE + '.tmp', FILE)
 
 if __name__ == '__main__':
     main()
