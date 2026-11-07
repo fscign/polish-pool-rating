@@ -44,15 +44,16 @@ def get(url):
         try:
             r = S.get(url, timeout=60)
             if r.status_code == 404: return ''
+            if r.status_code >= 500 and i >= 1: r.raise_for_status()   # one retry only: these errors stay
             r.raise_for_status(); time.sleep(PAUSE)
             b = r.content
             try: return b.decode('utf-8')
             except UnicodeDecodeError:
                 t = b.decode('utf-8', 'replace')
                 return t if t.count('�') < 20 else b.decode('cp1250', 'replace')
-        except Exception:
-            if i == 3: raise
-            time.sleep(5 * (i + 1))
+        except Exception as e:
+            if i == 3 or ('Server Error' in str(e) and i >= 1): raise
+            time.sleep(3 * (i + 1))
 
 def get_or_empty(url):
     """pzbil.pl sometimes answers 500 for single pages: skip them (they are tried again next run)."""
@@ -75,6 +76,7 @@ def game_of(s):
 D = {'tournaments': [], 'matches': [], 'players': {}}
 if os.path.exists(FILE): D = json.load(gzip.open(FILE, 'rt', encoding='utf-8'))
 TOUR = {t[0]: t for t in D['tournaments']}
+DEBUG = []   # result pages the bracket parser could not read (round-robin groups?), saved to data/pzbil_debug/ for checking
 def store(row, ms, players):
     TOUR[row[0]] = row
     D['matches'] = [m for m in D['matches'] if m[0] != row[0]] + ms
@@ -130,6 +132,7 @@ def fetch_tournament(t):
             if not side[0][0] and not side[1][0]: continue
             # round: nearest heading or lettered section above (kept as found; brackets have no match numbers)
             ms.append([tid, n, side[0][0], side[1][0], side[0][1], side[1][1], game_of(t['name'] + ' ' + (txt(sub) if sub else '')), '', t['d1'], 'W1' if side[0][2] else 'W2' if side[1][2] else ''])
+        if not ms and len(DEBUG) < 5: DEBUG.append((tid, str(s)))
     row = [tid, t['name'], t['d1'], t['d2'], 'tournament', game_of(t['name']), t['status'], f"{BASE}/tournament/view?id={t['id']}", {}]
     return row, ms, P
 
@@ -147,12 +150,13 @@ def games_page(url, tid, date, rnd, name, extra):
         stt = box.find_all('div', recursive=True)[-1]
         ms.append([tid, n, '+'.join(a_side), '+'.join(b_side), sc[0] if sc else '', sc[1] if len(sc) > 1 else '',
                    game_of(label) or label, rnd + (' debel' if 'debel' in label.lower() else ''), date, txt(stt)])
-    h4 = s.select_one('.tc-post-grid-default h5')
-    row = [tid, name, date, date, 'league', '', 'finished' if ms and all('zakończ' in m[9] for m in ms) else 'open', url, extra]
+    t4 = s.select_one('.section-title-style8 h4')
+    if t4: extra = dict(extra, title=txt(t4))
+    row = [tid, (txt(t4) + ': ' if t4 else '') + name, date, date, 'league', '', 'finished' if ms and all('zakończ' in m[9] for m in ms) else 'open', url, extra]
     return row, ms, P
 
 def league_new():
-    n_m = 0
+    n_m = 0; done_seasons = set()
     for slug in SLUGS:
         seasons = set()
         info = get_or_empty(f'{BASE}/liga/{slug}/info/')
@@ -161,6 +165,8 @@ def league_new():
             h = get_or_empty(f'{BASE}/liga/{slug}/info/archive?season_id={sid}')
             if f'season_id={sid}' in h and re.search(rf'/liga/{slug}/info/(matches|final-games)', h): seasons.add((sid, 1))
         for sid, arch in sorted(seasons):
+            if sid in done_seasons: continue
+            done_seasons.add(sid)
             title = ''
             for g in range(1, 16):
                 h = get_or_empty(f'{BASE}/liga/{slug}/info/matches/?season_id={sid}&group={g}&archive={arch}')
@@ -176,7 +182,7 @@ def league_new():
                         mid = re.search(r'match_id=(\d+)', a['href']).group(1); tid = f'L{mid}'
                         td = tr.find_all('td', recursive=False)
                         date = (re.findall(r'\d{4}-\d{2}-\d{2}', txt(td[0])) or [''])[0]
-                        if tid in TOUR and TOUR[tid][6] == 'finished' and not ALL and date < CUTOFF: continue
+                        if tid in TOUR and TOUR[tid][6] == 'finished' and not ALL and date < CUTOFF and 'title' in TOUR[tid][8]: continue
                         teams = [txt(x) for x in tr.select('a[href*="/kluby/"]')]
                         res = store_new(BASE + H.unescape(a['href']), tid, date, rnd, f"{slug} season {sid} group {g}: {' - '.join(teams)}",
                                         {'league': slug, 'season': sid, 'group': g, 'teams': teams})
@@ -233,6 +239,8 @@ def archive():
             seen_games.add(key)
             q = dict(re.findall(r'(\w+)=([^&]+)', link))
             tid = f"A{year}:{link.split('.php')[0]}:{':'.join(f'{k}{v}' for k, v in q.items())}"
+            if tid in TOUR and not ALL: continue
+            if len(seen_games) % 200 == 0: save()
             try: n_m += archive_match(f'{ARCH}/liga/{year}/{link}', tid, date, year)
             except Exception as e: say('  failed', year, link, repr(e)[:100])
     D['archive_done'] = True
@@ -265,7 +273,8 @@ def main():
         tid = f"T{t['id']}"
         if t['d1'] and t['d1'] > TODAY.isoformat(): continue
         old = TOUR.get(tid)
-        if old and not ALL and old[6] == t['status'] and (t['d2'] or t['d1']) < CUTOFF and (old[8].get('results') == t['results']): continue
+        empty = old and t['results'] and not any(m[0] == tid for m in D['matches'])
+        if old and not ALL and not empty and old[6] == t['status'] and (t['d2'] or t['d1']) < CUTOFF and (old[8].get('results') == t['results']): continue
         try: row, ms, P = fetch_tournament(t)
         except Exception as e: say('  failed', tid, repr(e)[:120]); continue
         row[8]['results'] = t['results']
@@ -285,6 +294,9 @@ def main():
     with open('update_log.txt', 'a', encoding='utf-8') as f: f.write('\n'.join(LOG) + '\n')
 
 def save():
+    if DEBUG:
+        os.makedirs('data/pzbil_debug', exist_ok=True)
+        for tid, h in DEBUG: open(f'data/pzbil_debug/{tid}.html', 'w', encoding='utf-8').write(h)
     D['tournaments'] = sorted(TOUR.values(), key=lambda t: (t[2] or '', t[0]))
     D['collected'] = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
     os.makedirs(os.path.dirname(FILE) or '.', exist_ok=True)
