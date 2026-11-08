@@ -1,3 +1,5 @@
+**Since 9 Nov 2026 the collection runs in https://github.com/fscign/pool-data** (CueScore Poland and Czech Republic, Tournament Service, pzbil.pl). This repo keeps the data collected until then and will hold the Polish rating build.
+
 # Polish Pool Rating (data collection: Poland and Czech Republic)
 
 Non-commercial, for the pool community. This repository collects Polish pool results every day, so no results are
